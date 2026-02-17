@@ -123,30 +123,146 @@ jobs:
           extra_params=$(echo $extraParams | jq -r ' to_entries[] | select(.value != "") | "\(.key)=\(.value)"' | tr "\n" " " | sed 's/ $//')
           echo "args=$args $extra_params" >> $GITHUB_OUTPUT
 
-      - name: "😋 Update KernelSU"
+      - name: "😋 Update KernelSU & Apply Manual Hooks"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         if: ${{ env.withKernelSU == 'true' }}
         run: |
-          if [ -d "./KernelSU" ]; then
-            rm -rf "./KernelSU"
-          fi
-          if [ -d "./drivers/kernelsu" ]; then
-            rm -rf "./drivers/kernelsu"
-          fi
+          # 1. Pulisce vecchie installazioni
+          rm -rf KernelSU drivers/kernelsu
 
-          # Scarica e installa KernelSU Next
+          # 2. Installa KernelSU Next
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
-          # --- FIX: Aggiungi queste righe ---
+          # 3. Crea il file patch con gli hook manuali (Codice ripulito)
+          cat <<'EOF' > manual_hooks.patch
+          diff --git a/fs/exec.c b/fs/exec.c
+          --- a/fs/exec.c
+          +++ b/fs/exec.c
+          @@ -1886,11 +1886,24 @@
+           	return retval;
+           }
+           
+          +#ifdef CONFIG_KSU
+          +__attribute__((hot))
+          +extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
+          +				void *argv, void *envp, int *flags);
+          +#endif
+          +
+           int do_execve(struct filename *filename,
+           	const char __user *const __user *__argv,
+           	const char __user *const __user *__envp)
+           {
+           	struct user_arg_ptr argv = { .ptr.native = __argv };
+           	struct user_arg_ptr envp = { .ptr.native = __envp };
+          +#ifdef CONFIG_KSU
+          +	ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
+          +#endif
+           	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
+           }
+           
+          @@ -1919,6 +1932,9 @@
+           		.is_compat = true,
+           		.ptr.compat = __envp,
+           	};
+          +#ifdef CONFIG_KSU 
+          +	ksu_handle_execveat((int *)AT_FDCWD, &filename, &argv, &envp, 0);
+          +#endif
+           	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
+           }
+          diff --git a/fs/open.c b/fs/open.c
+          --- a/fs/open.c
+          +++ b/fs/open.c
+          @@ -34,6 +34,11 @@
+           #include <linux/audit.h>
+           #include <linux/falloc.h>
+           #include <linux/fs_struct.h>
+          +#ifdef CONFIG_KSU
+          +__attribute__((hot)) 
+          +extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
+          +				int *mode, int *flags);
+          +#endif
+           #include <linux/ima.h>
+           #include <linux/dnotify.h>
+           #include <linux/compat.h>
+          @@ -455,6 +460,9 @@
+           	struct inode *inode;
+           	int res;
+           	unsigned int lookup_flags = LOOKUP_FOLLOW;
+          + #ifdef CONFIG_KSU
+          +	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+          +#endif
+           
+           	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+           		return -EINVAL;
+          diff --git a/fs/stat.c b/fs/stat.c
+          --- a/fs/stat.c
+          +++ b/fs/stat.c
+          @@ -18,6 +18,10 @@
+           #include <linux/uaccess.h>
+           #include <asm/unistd.h>
+           
+          +#ifdef CONFIG_KSU
+          +__attribute__((hot)) 
+          +extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
+          +				int *flags);
+          +#endif
+          +
+           /**
+            * generic_fillattr - Fill in the basic attributes from the inode struct
+            * @inode: Inode to use as the source
+          @@ -353,6 +357,9 @@
+           	struct kstat stat;
+           	int error;
+           
+          +#ifdef CONFIG_KSU
+          +	ksu_handle_stat(&dfd, &filename, &flag);
+          +#endif
+           	error = vfs_fstatat(dfd, filename, &stat, flag);
+           	if (error)
+           		return error;
+          @@ -504,6 +511,9 @@
+           	struct kstat stat;
+           	int error;
+           
+          +#ifdef CONFIG_KSU
+          +	ksu_handle_stat(&dfd, &filename, &flag); 
+          +#endif
+           	error = vfs_fstatat(dfd, filename, &stat, flag);
+           	if (error)
+           		return error;
+          diff --git a/kernel/reboot.c b/kernel/reboot.c
+          --- a/kernel/reboot.c
+          +++ b/kernel/reboot.c
+          @@ -277,6 +277,11 @@
+            *
+            * reboot doesn't sync: do that yourself before calling this.
+            */
+          +#ifdef CONFIG_KSU
+          +extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);
+          +#endif
+           SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+           		void __user *, arg)
+           {
+          @@ -284,6 +289,9 @@
+           	char buffer[256];
+           	int ret = 0;
+           
+          +#ifdef CONFIG_KSU 
+          +	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
+          +#endif
+           	/* We only trust the superuser with rebooting the system. */
+           	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
+           		return -EPERM;
+          EOF
+
+          # 4. Applica la patch
+          echo "Applicazione patch manuali..."
+          git apply --check manual_hooks.patch || echo "⚠️ Check fallito, provo ad applicare comunque..."
+          git apply --reject --whitespace=fix manual_hooks.patch
+          
+          # 5. Configura .config
           echo -e "\nCONFIG_KSU=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "\nCONFIG_OVERLAY_FS=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
-          # ----------------------------------
-
-          echo -e "\nCONFIG_KPROBES=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "\nCONFIG_HAVE_KPROBES=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
-          echo -e "\nCONFIG_KPROBE_EVENTS=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
-
-          cat ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           
       - name: "👍 Make defconfig"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
