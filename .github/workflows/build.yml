@@ -134,22 +134,7 @@ jobs:
             rm -rf "./drivers/kernelsu"
           fi
 
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-
-          # ==============================================================================
-          # PATCHES FOR LEGACY KERNELS (Exynos 9611 / Kernel 4.14)
-          # ==============================================================================
-          
-          echo "Applying legacy kernel patches..."
-
-          # 1. Fix: 'TWA_RESUME' undeclared & implicit 'put_task_struct'
-          sed -i '/#include <linux\/list.h>/a #include <linux/sched.h>\n#include <linux/sched/task.h>\n\n#ifndef TWA_RESUME\n#define TWA_RESUME true\n#endif' drivers/kernelsu/allowlist.c
-          
-          # 2. Fix: no member named 'filter_count' in 'struct seccomp'
-          #    We comment out the line causing the error since the field doesn't exist.
-          sed -i 's/atomic_set(&current->seccomp.filter_count, 0);/\/\/ atomic_set(&current->seccomp.filter_count, 0);/g' drivers/kernelsu/app_profile.c
-
-          # ==============================================================================
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
           echo -e "\nCONFIG_KPROBES=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
           echo -e "\nCONFIG_HAVE_KPROBES=y" >> ./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}
