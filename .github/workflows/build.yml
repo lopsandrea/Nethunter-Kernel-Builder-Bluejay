@@ -171,8 +171,8 @@ jobs:
 
       - name: "🏴‍☠️ Post Action "
         run: |
-          make ${args} dtbs
-          make ${args} dtboimage
+          #make ${args} dtbs
+          #make ${args} dtboimage
           pwd
           find ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/ -type f
 
