@@ -144,6 +144,17 @@ jobs:
           # requires MANUAL syscall hooks. Apply backslashxx scope-minimized hooks (fs/exec.c,
           # open.c, read_write.c, stat.c, input.c, reboot.c, ...) via JackA1ltman's patcher (4.14-tested).
           curl -LSs "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/mainline/Patches/syscall_hook_patches.sh" -o /tmp/ksu_hooks.sh
+          # MINIMAL hook set: keep only the 5 official files. Drop the invasive patches
+          # (SELinux hooks/services, seccomp.h, namei.c, kernel/sys.c, input.c) which conflict with
+          # Samsung's customized SELinux/defex tree and bootloop the device.
+          sed -i -e '/^[[:space:]]*fs\/namei.c/d' \
+                 -e '/^[[:space:]]*drivers\/input\/input.c/d' \
+                 -e '/^[[:space:]]*security\/security.c/d' \
+                 -e '/^[[:space:]]*security\/selinux\/hooks.c/d' \
+                 -e '/^[[:space:]]*security\/selinux\/ss\/services.c/d' \
+                 -e '/^[[:space:]]*kernel\/sys.c/d' \
+                 -e '/^[[:space:]]*include\/linux\/seccomp.h/d' /tmp/ksu_hooks.sh
+          echo "----- patch_files after trim -----"; sed -n '/^patch_files=(/,/^)/p' /tmp/ksu_hooks.sh
           bash /tmp/ksu_hooks.sh
           echo "----- ksu_handle hooks inserted -----"
           grep -rl "ksu_handle" fs/ drivers/input/input.c kernel/reboot.c 2>/dev/null || true
