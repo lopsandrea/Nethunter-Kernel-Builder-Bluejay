@@ -47,6 +47,7 @@ jobs:
       kernelDevice: ${{ matrix.repos.kernelSource.device }}
       DEFCONFIG_NAME: ${{ matrix.repos.kernelSource.device }}_defconfig
       withKernelSU: ${{ matrix.repos.withKernelSU }}
+      withNetHunter: ${{ matrix.repos.withNetHunter }}
 
     steps:
       - name: "✨ Create working dir"
@@ -151,6 +152,57 @@ jobs:
           echo "----- tail defconfig -----"
           tail -n 12 "$DEFCONF"
 
+      - name: "🥷 Apply Kali NetHunter patches + config"
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        if: ${{ env.withNetHunter == 'true' }}
+        run: |
+          git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-builder.git /tmp/nh
+          PD=/tmp/nh/patches/4.14
+          # Patches verified to apply cleanly on this LineageOS 4.14 tree (dry-run tested).
+          # Skipped: fix-yylloc (host-tool, already fixed upstream) and rtl8188eus (conflicts on
+          # in-tree rtl8xxxu - deferred). rtl88xxau (rtl8812au/8811au) applies clean = main injection NIC.
+          for p in \
+            add-wifi-injection-4.14.patch \
+            fix-thread_info.h-compile-time-errors.patch \
+            fix-ath9k-naming-conflict.patch \
+            add-rtl88xxau-5.6.4.2-drivers.patch ; do
+            echo "===================== applying $p ====================="
+            if ! patch -p1 --forward --no-backup-if-mismatch < "$PD/$p"; then
+              echo "::error::patch $p failed"; find . -name '*.rej' | xargs -r -I{} sh -c 'echo "--- {} ---"; cat {}'; exit 1
+            fi
+          done
+          # NetHunter defconfig fragment (appended; later entries override the base defconfig)
+          DEFCONF="./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}"
+          cat >> "$DEFCONF" <<'NHEOF'
+          CONFIG_MAC80211=y
+          CONFIG_MAC80211_MESH=y
+          CONFIG_USB_CONFIGFS_F_HID=y
+          CONFIG_USB_CONFIGFS_MASS_STORAGE=y
+          CONFIG_RTL8187=y
+          CONFIG_RTL8XXXU=y
+          CONFIG_RTL8XXXU_UNTESTED=y
+          CONFIG_ATH9K=y
+          CONFIG_ATH9K_HTC=y
+          CONFIG_CARL9170=y
+          CONFIG_ZD1211RW=y
+          CONFIG_RT2X00=y
+          CONFIG_RT2800USB=y
+          CONFIG_RT2800USB_RT33XX=y
+          CONFIG_RT2800USB_RT35XX=y
+          CONFIG_RT2800USB_RT3573=y
+          CONFIG_RT2800USB_RT53XX=y
+          CONFIG_RT2800USB_RT55XX=y
+          CONFIG_RT2800USB_UNKNOWN=y
+          CONFIG_MT7601U=y
+          CONFIG_88XXAU=y
+          CONFIG_USB_SERIAL_CH341=y
+          CONFIG_USB_SERIAL_PL2303=y
+          CONFIG_USB_SERIAL_FTDI_SIO=y
+          CONFIG_USB_SERIAL_CP210X=y
+          NHEOF
+          echo "----- NetHunter tail defconfig -----"
+          tail -n 28 "$DEFCONF"
+
       - name: "👍 Make defconfig"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         env:
@@ -198,7 +250,7 @@ jobs:
           cat > AnyKernel3/anykernel.sh <<'AKEOF'
           ### AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=KernelSU-Next for Galaxy Tab S6 Lite WiFi (gta4xlwifi / SM-P610) - lineage-22.2
+          kernel.string=KernelSU-Next + Kali NetHunter for Galaxy Tab S6 Lite WiFi (gta4xlwifi / SM-P610) - lineage-22.2
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -220,7 +272,7 @@ jobs:
           dump_boot;
           write_boot;
           AKEOF
-          ZIP="KernelSU-Next-gta4xlwifi-r${{ github.run_number }}.zip"
+          ZIP="NetHunter-KernelSU-gta4xlwifi-r${{ github.run_number }}.zip"
           ( cd AnyKernel3 && zip -r9 "../$ZIP" . -x ".git*" )
           ls -la ./*.zip
           echo "Built flashable zip: $ZIP"

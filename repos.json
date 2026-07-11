@@ -6,6 +6,7 @@
       "device": "exynos9611-gta4xlwifi"
     },
     "withKernelSU": true,
+    "withNetHunter": true,
     "toolchains": [
       {
         "repo": "https://android.googlesource.com/platform/prebuilts/gas/linux-x86",
