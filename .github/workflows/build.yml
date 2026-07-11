@@ -185,6 +185,55 @@ jobs:
           pwd
           find ./${{ env.kernelDir }}/${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/ -type f
 
+      - name: "📦 Build flashable AnyKernel3 zip"
+        if: ${{ env.withKernelSU == 'true' }}
+        working-directory: ./${{ env.kernelDir }}
+        run: |
+          BOOT="./${{ env.OUT_DIR }}/arch/${{ env.ARCH }}/boot"
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          rm -rf AnyKernel3/.git AnyKernel3/.github AnyKernel3/README.md
+          # Kernel image (prefer gzip); Samsung Tab S6 Lite uses separate dtb/dtbo partitions,
+          # so a kernel-only boot repack is sufficient - existing dtb/dtbo stay compatible.
+          if [ -f "$BOOT/Image.gz" ]; then cp "$BOOT/Image.gz" AnyKernel3/Image.gz; else cp "$BOOT/Image" AnyKernel3/Image; fi
+          cat > AnyKernel3/anykernel.sh <<'AKEOF'
+          ### AnyKernel3 Ramdisk Mod Script
+          properties() { '
+          kernel.string=KernelSU-Next for Galaxy Tab S6 Lite WiFi (gta4xlwifi / SM-P610) - lineage-22.2
+          do.devicecheck=1
+          do.modules=0
+          do.systemless=1
+          do.cleanup=1
+          do.cleanuponabort=1
+          device.name1=gta4xlwifi
+          device.name2=gta4xl
+          device.name3=SM-P610
+          device.name4=SM-P615
+          device.name5=gta4xlwifixx
+          supported.versions=
+          supported.patchlevels=
+          '; }
+          block=/dev/block/by-name/boot;
+          is_slot_device=0;
+          ramdisk_compression=auto;
+          patch_vbmeta_flag=auto;
+          . tools/ak3-core.sh;
+          dump_boot;
+          write_boot;
+          AKEOF
+          ZIP="KernelSU-Next-gta4xlwifi-r${{ github.run_number }}.zip"
+          ( cd AnyKernel3 && zip -r9 "../$ZIP" . -x ".git*" )
+          ls -la ./*.zip
+          echo "Built flashable zip: $ZIP"
+
+      - name: "🧿 Upload flashable KernelSU zip"
+        if: ${{ env.withKernelSU == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: KernelSU-Next-${{ env.kernelDevice }}-flashable
+          path: ./${{ env.kernelDir }}/*.zip
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: "💛 Upload Image"
         uses: actions/upload-artifact@v4
         with:
