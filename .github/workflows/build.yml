@@ -133,9 +133,11 @@ jobs:
         run: |
           # Clean any previous KernelSU integration
           rm -rf ./KernelSU-Next ./KernelSU ./drivers/kernelsu
-          # Integrate KernelSU-Next pinned to v3.0.1: kprobes-based hooks, compiles on
-          # non-GKI kernel 4.14 (the newer v3.3.0 syscall-table hook needs syscall_fn_t, arm64 >= 4.19 only).
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v3.0.1
+          # Integrate KernelSU-Next pinned to the v3.0.1-LEGACY tag: the legacy line targets old
+          # non-GKI kernels. Its kernel_compat.h defines TWA_RESUME/strncpy_from_user_nofault and its
+          # Kbuild auto-backports path_umount into fs/namespace.c for kernel 4.14. (v3.3.0 syscall-table
+          # hook needs syscall_fn_t = arm64 >= 4.19; plain v3.0.1 uses 5.8+ APIs unguarded.)
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v3.0.1-legacy
           # Enable KernelSU + kprobes-based syscall hooks in the defconfig
           DEFCONF="./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}"
           {
