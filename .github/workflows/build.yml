@@ -147,13 +147,7 @@ jobs:
           # MINIMAL hook set: keep only the 5 official files. Drop the invasive patches
           # (SELinux hooks/services, seccomp.h, namei.c, kernel/sys.c, input.c) which conflict with
           # Samsung's customized SELinux/defex tree and bootloop the device.
-          sed -i -e '/^[[:space:]]*fs\/namei.c/d' \
-                 -e '/^[[:space:]]*drivers\/input\/input.c/d' \
-                 -e '/^[[:space:]]*security\/security.c/d' \
-                 -e '/^[[:space:]]*security\/selinux\/hooks.c/d' \
-                 -e '/^[[:space:]]*security\/selinux\/ss\/services.c/d' \
-                 -e '/^[[:space:]]*kernel\/sys.c/d' \
-                 -e '/^[[:space:]]*include\/linux\/seccomp.h/d' /tmp/ksu_hooks.sh
+          sed -i '/^patch_files=(/,/^)/{/fs\/namei.c/d;/drivers\/input\/input.c/d;/security\/security.c/d;/security\/selinux\/hooks.c/d;/security\/selinux\/ss\/services.c/d;/kernel\/sys.c/d;/include\/linux\/seccomp.h/d}' /tmp/ksu_hooks.sh
           echo "----- patch_files after trim -----"; sed -n '/^patch_files=(/,/^)/p' /tmp/ksu_hooks.sh
           bash /tmp/ksu_hooks.sh
           echo "----- ksu_handle hooks inserted -----"
