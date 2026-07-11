@@ -6,6 +6,10 @@ env:
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build.yml"
+      - "repos.json"
 
 jobs:
   Set-repos:
@@ -122,7 +126,28 @@ jobs:
           echo "extraParams_toJson: $extraParams"
           extra_params=$(echo $extraParams | jq -r ' to_entries[] | select(.value != "") | "\(.key)=\(.value)"' | tr "\n" " " | sed 's/ $//')
           echo "args=$args $extra_params" >> $GITHUB_OUTPUT
-          
+
+      - name: "😋 Setup KernelSU-Next"
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        if: ${{ env.withKernelSU == 'true' }}
+        run: |
+          # Clean any previous KernelSU integration
+          rm -rf ./KernelSU-Next ./KernelSU ./drivers/kernelsu
+          # Integrate KernelSU-Next (non-GKI / old-kernel friendly). No arg => latest stable tag.
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          # Enable KernelSU + kprobes-based syscall hooks in the defconfig
+          DEFCONF="./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}"
+          {
+            echo "CONFIG_KPROBES=y"
+            echo "CONFIG_KPROBE_EVENTS=y"
+            echo "CONFIG_KSU=y"
+          } >> "$DEFCONF"
+          echo "----- KernelSU-Next integration -----"
+          ls -la ./drivers/kernelsu || true
+          grep -n "kernelsu" ./drivers/Makefile ./drivers/Kconfig || true
+          echo "----- tail defconfig -----"
+          tail -n 12 "$DEFCONF"
+
       - name: "👍 Make defconfig"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         env:
