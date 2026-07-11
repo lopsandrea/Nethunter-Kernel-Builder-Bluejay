@@ -139,12 +139,19 @@ jobs:
           # Kbuild auto-backports path_umount into fs/namespace.c for kernel 4.14. (v3.3.0 syscall-table
           # hook needs syscall_fn_t = arm64 >= 4.19; plain v3.0.1 uses 5.8+ APIs unguarded.)
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v3.0.1-legacy
-          # Enable KernelSU + kprobes-based syscall hooks in the defconfig
+          # NON-GKI 4.14: kprobes hooks do NOT register the manager (manager shows the
+          # "v2 signature not found / !KSU_NEXT" error and cannot grant root). KSU-Next v3 legacy
+          # requires MANUAL syscall hooks. Apply backslashxx scope-minimized hooks (fs/exec.c,
+          # open.c, read_write.c, stat.c, input.c, reboot.c, ...) via JackA1ltman's patcher (4.14-tested).
+          curl -LSs "https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/mainline/Patches/syscall_hook_patches.sh" -o /tmp/ksu_hooks.sh
+          bash /tmp/ksu_hooks.sh
+          echo "----- ksu_handle hooks inserted -----"
+          grep -rl "ksu_handle" fs/ drivers/input/input.c kernel/reboot.c 2>/dev/null || true
+          # Enable KernelSU with MANUAL hooks (CONFIG_KSU_MANUAL_HOOK auto-disables KSU_KPROBES_HOOK)
           DEFCONF="./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}"
           {
-            echo "CONFIG_KPROBES=y"
-            echo "CONFIG_KPROBE_EVENTS=y"
             echo "CONFIG_KSU=y"
+            echo "CONFIG_KSU_MANUAL_HOOK=y"
           } >> "$DEFCONF"
           echo "----- KernelSU-Next integration -----"
           ls -la ./drivers/kernelsu || true
