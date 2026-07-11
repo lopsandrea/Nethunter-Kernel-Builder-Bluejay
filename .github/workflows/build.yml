@@ -133,8 +133,9 @@ jobs:
         run: |
           # Clean any previous KernelSU integration
           rm -rf ./KernelSU-Next ./KernelSU ./drivers/kernelsu
-          # Integrate KernelSU-Next (non-GKI / old-kernel friendly). No arg => latest stable tag.
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          # Integrate KernelSU-Next pinned to v3.0.1: kprobes-based hooks, compiles on
+          # non-GKI kernel 4.14 (the newer v3.3.0 syscall-table hook needs syscall_fn_t, arm64 >= 4.19 only).
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v3.0.1
           # Enable KernelSU + kprobes-based syscall hooks in the defconfig
           DEFCONF="./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}"
           {
