@@ -171,6 +171,9 @@ jobs:
               echo "::error::patch $p failed"; find . -name '*.rej' | xargs -r -I{} sh -c 'echo "--- {} ---"; cat {}'; exit 1
             fi
           done
+          # rtl8812au is a warning-heavy out-of-tree driver; clang -Werror trips on it
+          # (parentheses-equality, pointer-bool-conversion, ...). Relax -Werror for THIS driver only.
+          echo 'EXTRA_CFLAGS += -Wno-error -Wno-parentheses-equality -Wno-pointer-bool-conversion' >> drivers/net/wireless/realtek/rtl8812au/Makefile
           # NetHunter defconfig fragment (appended; later entries override the base defconfig)
           DEFCONF="./arch/${{ env.ARCH }}/configs/${{ env.DEFCONFIG_NAME }}"
           cat >> "$DEFCONF" <<'NHEOF'
